@@ -2,9 +2,12 @@
 
 import json
 import os
+import sys
 
+import eventlet
 import fire
 import numpy as np
+import socketio
 import tensorflow as tf
 
 import encoder
@@ -12,8 +15,12 @@ import model
 import sample
 
 
+def log(*args):
+    print(f"[{os.environ.get('RANK', '')}]", *args, file=sys.stderr)
+
+
 def interact_model(
-    model_name="774M",
+    model_name="1558M",
     seed=None,
     nsamples=1,
     batch_size=1,
@@ -22,6 +29,8 @@ def interact_model(
     top_k=40,
     top_p=1,
     models_dir="models",
+    host="0.0.0.0",
+    port=8000,
 ):
     """
     Interactively run the model
@@ -60,42 +69,61 @@ def interact_model(
             "Can't get samples longer than window size: %s" % hparams["n_ctx"]
         )
 
-    with tf.compat.v1.Session(graph=tf.Graph()) as sess:
-        context = tf.compat.v1.placeholder(tf.int32, [batch_size, None])
-        np.random.seed(seed)
-        tf.compat.v1.set_random_seed(seed)
-        output = sample.sample_sequence(
-            hparams=hparams,
-            length=length,
-            context=context,
-            batch_size=batch_size,
-            temperature=temperature,
-            top_k=top_k,
-            top_p=top_p,
-        )
+    sio = socketio.Server(async_mode="eventlet")
+    app = socketio.WSGIApp(
+        sio,
+        static_files={
+            "/": {
+                "content_type": "text/html",
+                "filename": os.path.join(os.path.dirname(__file__), "index.html"),
+            }
+        },
+    )
 
-        saver = tf.compat.v1.train.Saver()
-        ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
-        saver.restore(sess, ckpt)
+    @sio.event
+    def connect(sid, environ):
+        print("connect ", sid)
+        sio.emit("response", {"response": "hello! I'm your chatbot. AMA!"}, room=sid)
 
-        while True:
-            raw_text = input("Model prompt >>> ")
-            while not raw_text:
-                print("Prompt should not be empty!")
-                raw_text = input("Model prompt >>> ")
-            context_tokens = enc.encode(raw_text)
-            generated = 0
-            for _ in range(nsamples // batch_size):
+    @sio.event
+    def query(sid, msg):
+        print("message ", msg)
+        query = msg["msg"]
+        context_tokens = enc.encode(query)
+        generated = 0
+        for _ in range(nsamples // batch_size):
+            with tf.compat.v1.Session(graph=tf.Graph()) as sess:
+                context = tf.compat.v1.placeholder(tf.int32, [batch_size, None])
+                np.random.seed(seed)
+                tf.compat.v1.set_random_seed(seed)
+                output = sample.sample_sequence(
+                    hparams=hparams,
+                    length=length,
+                    context=context,
+                    batch_size=batch_size,
+                    temperature=temperature,
+                    top_k=top_k,
+                    top_p=top_p,
+                )
+
+                saver = tf.compat.v1.train.Saver()
+                ckpt = tf.train.latest_checkpoint(os.path.join(models_dir, model_name))
+                saver.restore(sess, ckpt)
                 out = sess.run(
                     output,
                     feed_dict={context: [context_tokens for _ in range(batch_size)]},
                 )[:, len(context_tokens) :]
-                for i in range(batch_size):
-                    generated += 1
-                    text = enc.decode(out[i])
-                    print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40)
-                    print(text)
-            print("=" * 80)
+            for i in range(batch_size):
+                generated += 1
+                text = enc.decode(out[i])
+                print(text)
+                sio.emit("response", {"response": text}, room=sid)
+
+    @sio.event
+    def disconnect(sid):
+        print("disconnect ", sid)
+
+    eventlet.wsgi.server(eventlet.listen((host, port)), app)
 
 
 if __name__ == "__main__":

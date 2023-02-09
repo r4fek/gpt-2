@@ -10,11 +10,10 @@ ENV NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_REQUIRE_CUDA="cuda>=8.0" \
     LANG=C.UTF-8
 
-RUN mkdir /gpt-2
+RUN mkdir -p /gpt-2/models
 WORKDIR /gpt-2
-ADD . /gpt-2
+COPY requirements.txt .
 RUN pip3 install -r requirements.txt
-RUN python3 download_model.py 124M
-RUN python3 download_model.py 355M
-RUN python3 download_model.py 774M
-RUN python3 download_model.py 1558M
+COPY src /gpt-2/src
+ENTRYPOINT [ "/bin/bash" ]
+CMD ["python3", "src/server.py"]

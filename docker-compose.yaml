@@ -1,0 +1,11 @@
+version: "3.9"
+services:
+  gpt2:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - "./models:/gpt-2/models/"
+
+volumes:
+  models:

@@ -1,0 +1,133 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>GPT-2 Output Detector</title>
+    <script type="text/javascript" src="//cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    <style type="text/css">
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: sans-serif;
+            margin: 0;
+        }
+
+        h1 {
+            font-weight: lighter;
+        }
+
+        a {
+            text-decoration: none;
+            color: #666;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        #container {
+            margin: auto;
+            width: 960px;
+        }
+
+        #textbox {
+            font-family: serif;
+            font-size: 16pt;
+            width: 100%;
+            padding: 20px 30px;
+            line-height: 1.6;
+        }
+
+        .bar-row {
+            height: 30px;
+        }
+
+        #real-percentage {
+            width: 80px;
+            vertical-align: top;
+        }
+
+        #bar-container {
+            width: 800px;
+            background-color: #ff7674;
+            line-height: 0.5;
+            position: relative;
+            top: 6px;
+        }
+
+        #fake-percentage {
+            width: 80px;
+            vertical-align: top;
+        }
+
+        #bar {
+            display: inline-block;
+            height: 30px;
+            background-color: #83aaff;
+        }
+
+        em {
+            font-family: monospace;
+            font-style: normal;
+        }
+
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <h1>GPT-2</h1>
+        <form id="gptform" method="GET" action="">
+            <textarea id="textbox" placeholder="Enter text here"></textarea>
+            <input type="submit" name="Submit" id="submitbtn" />
+        </form>
+        <p id="status"></p>
+        <div id="responses"></div>
+
+    </div>
+    <script>
+        let textbox = document.getElementById('textbox');
+        let gptform = document.getElementById('gptform');
+        let responsebox = document.getElementById('responses');
+        let submitButton = document.getElementById('submitbtn')
+        let message = document.getElementById('status');
+        let socket = io.connect('http://' + document.domain + ':' + location.port);
+
+        socket.on('connect', function () {
+            socket.emit('joined', {});
+        });
+        socket.on('response', function (data) {
+            console.log(data);
+            update_graph(data.response);
+        });
+
+        function update_graph(result) {
+            if (result === null) {
+                textbox.value = "";
+                message.innerText = "Error"
+            } else {
+                responsebox.innerHTML += "<p>Response: " + result + "</p>";
+                message.innerText = "";
+            }
+            submitButton.disabled = false;
+        }
+
+        gptform.onsubmit = (e) => {
+            e.preventDefault();
+            if (textbox.value.length === 0) {
+                return;
+            }
+            message.innerText = 'Thinking ...';
+            socket.emit('query', { msg: textbox.value });
+            submitButton.disabled = true;
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            textbox.focus();
+        });
+    </script>
+</body>
+
+</html>
