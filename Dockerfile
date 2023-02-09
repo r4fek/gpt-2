@@ -15,5 +15,4 @@ WORKDIR /gpt-2
 COPY requirements.txt .
 RUN pip3 install -r requirements.txt
 COPY src /gpt-2/src
-ENTRYPOINT [ "/bin/bash" ]
-CMD ["python3", "src/server.py"]
+CMD ["python3", "src/interactive_server.py"]
